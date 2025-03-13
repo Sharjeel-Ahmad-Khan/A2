@@ -1,0 +1,891 @@
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  FlatList,
+  StyleSheet,
+  TouchableOpacity,
+  ActivityIndicator,
+  ScrollView,
+  TextInput,
+  StatusBar,
+  Alert,
+  Image,
+  RefreshControl,
+} from 'react-native';
+import { NavigationContainer } from '@react-navigation/native';
+import { createStackNavigator } from '@react-navigation/stack';
+
+// Authentication Screen
+const AuthScreen = ({ navigation }) => {
+  const [username, setUsername] = useState('');
+  const [password, setPassword] = useState('');
+  const [isSignUp, setIsSignUp] = useState(false);
+
+  const handleAuth = () => {
+    if (!username || !password) {
+      Alert.alert('Error', 'Please fill in all fields');
+      return;
+    }
+    navigation.replace('Home', { username });
+    Alert.alert('Success', isSignUp ? 'Account Created!' : 'Welcome Back!');
+  };
+
+  return (
+    <View style={styles.authContainer}>
+      <Text style={styles.authTitle}>{isSignUp ? 'Create Account' : 'Welcome to Sakq'}</Text>
+      <TextInput
+        style={styles.input}
+        placeholder="Username"
+        value={username}
+        onChangeText={setUsername}
+        autoCapitalize="none"
+      />
+      <TextInput
+        style={styles.input}
+        placeholder="Password"
+        value={password}
+        onChangeText={setPassword}
+        secureTextEntry
+      />
+      <TouchableOpacity style={styles.authButton} onPress={handleAuth}>
+        <Text style={styles.authButtonText}>{isSignUp ? 'Sign Up' : 'Login'}</Text>
+      </TouchableOpacity>
+      <TouchableOpacity onPress={() => setIsSignUp(!isSignUp)}>
+        <Text style={styles.switchText}>
+          {isSignUp ? 'Have an account? Login' : 'New here? Sign Up'}
+        </Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+// Home Screen (Feed)
+const HomeScreen = ({ navigation, route }) => {
+  const [posts, setPosts] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [newPost, setNewPost] = useState('');
+  const [newImage, setNewImage] = useState('');
+  const [editingPost, setEditingPost] = useState(null);
+  const username = route.params?.username || 'Guest';
+
+  const fetchPosts = async () => {
+    try {
+      const response = await fetch('https://jsonplaceholder.typicode.com/posts?_limit=20');
+      const data = await response.json();
+      setPosts(data.map(post => ({
+        ...post,
+        likes: Math.floor(Math.random() * 100),
+        comments: [],
+        shares: Math.floor(Math.random() * 50),
+        image: `https://picsum.photos/200/300?random=${post.id}`,
+      })));
+      setLoading(false);
+      setRefreshing(false);
+    } catch (error) {
+      Alert.alert('Error', 'Failed to load posts');
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchPosts();
+  }, []);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchPosts();
+  };
+
+  const addPost = () => {
+    if (!newPost.trim()) return;
+    const post = {
+      id: Date.now(),
+      title: newPost.substring(0, 20) + '...',
+      body: newPost,
+      userId: 1,
+      likes: 0,
+      comments: [],
+      shares: 0,
+      image: newImage || `https://picsum.photos/200/300?random=${Date.now()}`,
+    };
+    setPosts([post, ...posts]);
+    setNewPost('');
+    setNewImage('');
+    Alert.alert('Success', 'Post shared!');
+  };
+
+  const editPost = (id) => {
+    const postToEdit = posts.find(post => post.id === id);
+    setEditingPost(postToEdit);
+    setNewPost(postToEdit.body);
+    setNewImage(postToEdit.image);
+  };
+
+  const saveEditedPost = () => {
+    if (!newPost.trim()) return;
+    setPosts(posts.map(post =>
+      post.id === editingPost.id
+        ? { ...post, body: newPost, title: newPost.substring(0, 20) + '...', image: newImage || post.image }
+        : post
+    ));
+    setNewPost('');
+    setNewImage('');
+    setEditingPost(null);
+    Alert.alert('Success', 'Post updated!');
+  };
+
+  const deletePost = (id) => {
+    Alert.alert(
+      'Delete Post',
+      'Are you sure you want to delete this post?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: () => {
+            setPosts(posts.filter(post => post.id !== id));
+            Alert.alert('Success', 'Post deleted!');
+          },
+        },
+      ]
+    );
+  };
+
+  const likePost = (id) => {
+    setPosts(posts.map(post =>
+      post.id === id ? { ...post, likes: post.likes + 1 } : post
+    ));
+  };
+
+  const sharePost = (id) => {
+    setPosts(posts.map(post =>
+      post.id === id ? { ...post, shares: post.shares + 1 } : post
+    ));
+  };
+
+  const renderPost = ({ item }) => (
+    <View style={styles.postCard}>
+      <TouchableOpacity onPress={() => navigation.navigate('MyProfile', { username })}>
+        <Text style={styles.postUser}>User {item.userId}</Text>
+      </TouchableOpacity>
+      <Text style={styles.postTitle}>{item.title}</Text>
+      <Text style={styles.postBody}>{item.body}</Text>
+      <Image source={{ uri: item.image }} style={styles.postImage} />
+      <View style={styles.postStats}>
+        <TouchableOpacity onPress={() => likePost(item.id)}>
+          <Text style={styles.statText}>❤️ {item.likes}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => navigation.navigate('Comments', { post: item })}>
+          <Text style={styles.statText}>💬 {item.comments.length}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => sharePost(item.id)}>
+          <Text style={styles.statText}>↳ {item.shares}</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => editPost(item.id)}>
+          <Text style={styles.statText}>✏️ Edit</Text>
+        </TouchableOpacity>
+        <TouchableOpacity onPress={() => deletePost(item.id)}>
+          <Text style={styles.statText}>🗑️ Delete</Text>
+        </TouchableOpacity>
+      </View>
+    </View>
+  );
+
+  if (loading) return <ActivityIndicator size="large" color="#1a73e8" style={styles.loading} />;
+
+  return (
+    <View style={styles.container}>
+      <View style={styles.navButtons}>
+        <TouchableOpacity
+          style={styles.navButton}
+          onPress={() => navigation.navigate('MyProfile', { username })}
+        >
+          <Text style={styles.navButtonText}>My Profile</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.navButton}
+          onPress={() => navigation.navigate('Chat')}
+        >
+          <Text style={styles.navButtonText}>Chat</Text>
+        </TouchableOpacity>
+        <TouchableOpacity
+          style={styles.navButton}
+          onPress={() => navigation.navigate('Notifications')}
+        >
+          <Text style={styles.navButtonText}>Notifications</Text>
+        </TouchableOpacity>
+      </View>
+      <View style={styles.postInputContainer}>
+        <TextInput
+          style={styles.postInput}
+          placeholder={editingPost ? 'Edit your post...' : "What's on your mind?"}
+          value={newPost}
+          onChangeText={setNewPost}
+          multiline
+        />
+        <TextInput
+          style={styles.imageInput}
+          placeholder="Image URL (optional)"
+          value={newImage}
+          onChangeText={setNewImage}
+        />
+        <TouchableOpacity
+          style={styles.postButton}
+          onPress={editingPost ? saveEditedPost : addPost}
+        >
+          <Text style={styles.postButtonText}>{editingPost ? 'Save' : 'Post'}</Text>
+        </TouchableOpacity>
+        {editingPost && (
+          <TouchableOpacity
+            style={styles.cancelButton}
+            onPress={() => {
+              setNewPost('');
+              setNewImage('');
+              setEditingPost(null);
+            }}
+          >
+            <Text style={styles.cancelButtonText}>Cancel</Text>
+          </TouchableOpacity>
+        )}
+      </View>
+      <FlatList
+        data={posts}
+        renderItem={renderPost}
+        keyExtractor={item => item.id.toString()}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        contentContainerStyle={styles.feedList}
+      />
+    </View>
+  );
+};
+
+// My Profile Screen (Simplified with Name Editing)
+const MyProfileScreen = ({ route, navigation }) => {
+  const [username, setUsername] = useState(route.params?.username || 'Guest');
+  const [bio, setBio] = useState('Living my best life!');
+  const [profilePic, setProfilePic] = useState('https://picsum.photos/200');
+  const [isEditing, setIsEditing] = useState(false);
+
+  const saveProfile = () => {
+    setIsEditing(false);
+    Alert.alert('Success', 'Profile updated!');
+    navigation.setParams({ username }); // Update navigation params
+  };
+
+  return (
+    <ScrollView style={styles.container}>
+      <View style={styles.profileHeader}>
+        <Image source={{ uri: profilePic }} style={styles.profilePic} />
+        {isEditing && (
+          <TextInput
+            style={styles.profileInput}
+            value={profilePic}
+            onChangeText={setProfilePic}
+            placeholder="Profile Picture URL (e.g., from gallery)"
+          />
+        )}
+        {isEditing ? (
+          <TextInput
+            style={styles.profileInput}
+            value={username}
+            onChangeText={setUsername}
+            placeholder="Your Name"
+          />
+        ) : (
+          <Text style={styles.profileName}>{username}</Text>
+        )}
+      </View>
+      <View style={styles.profileDetails}>
+        <Text style={styles.profileLabel}>Bio:</Text>
+        {isEditing ? (
+          <TextInput
+            style={styles.profileInput}
+            value={bio}
+            onChangeText={setBio}
+            multiline
+          />
+        ) : (
+          <Text style={styles.profileText}>{bio}</Text>
+        )}
+        {isEditing ? (
+          <TouchableOpacity style={styles.saveButton} onPress={saveProfile}>
+            <Text style={styles.saveButtonText}>Save</Text>
+          </TouchableOpacity>
+        ) : (
+          <TouchableOpacity style={styles.editButton} onPress={() => setIsEditing(true)}>
+            <Text style={styles.editButtonText}>Edit Profile</Text>
+          </TouchableOpacity>
+        )}
+        <TouchableOpacity
+          style={styles.backButton}
+          onPress={() => navigation.navigate('Home', { username })}
+        >
+          <Text style={styles.backButtonText}>Back to Feed</Text>
+        </TouchableOpacity>
+      </View>
+    </ScrollView>
+  );
+};
+
+// Chat Screen
+const ChatScreen = ({ navigation }) => {
+  const [messages, setMessages] = useState([
+    { id: 1, text: 'Hey there!', sender: 'Friend', time: new Date().toLocaleTimeString() },
+    { id: 2, text: 'Hi! How’s it going?', sender: 'Me', time: new Date().toLocaleTimeString() },
+  ]);
+  const [newMessage, setNewMessage] = useState('');
+
+  const sendMessage = () => {
+    if (!newMessage.trim()) return;
+    setMessages([
+      ...messages,
+      { id: Date.now(), text: newMessage, sender: 'Me', time: new Date().toLocaleTimeString() },
+    ]);
+    setNewMessage('');
+    setTimeout(() => {
+      setMessages(prev => [
+        ...prev,
+        { id: Date.now(), text: 'Cool, glad to hear!', sender: 'Friend', time: new Date().toLocaleTimeString() },
+      ]);
+    }, 1000);
+  };
+
+  const renderMessage = ({ item }) => (
+    <View style={item.sender === 'Me' ? styles.myMessage : styles.friendMessage}>
+      <Text style={styles.messageText}>{item.text}</Text>
+      <Text style={styles.messageTime}>{item.time}</Text>
+    </View>
+  );
+
+  return (
+    <View style={styles.container}>
+      <FlatList
+        data={messages}
+        renderItem={renderMessage}
+        keyExtractor={item => item.id.toString()}
+        contentContainerStyle={styles.chatList}
+      />
+      <View style={styles.chatInputContainer}>
+        <TextInput
+          style={styles.chatInput}
+          placeholder="Type a message..."
+          value={newMessage}
+          onChangeText={setNewMessage}
+        />
+        <TouchableOpacity style={styles.sendButton} onPress={sendMessage}>
+          <Text style={styles.sendButtonText}>Send</Text>
+        </TouchableOpacity>
+      </View>
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => navigation.navigate('Home')}
+      >
+        <Text style={styles.backButtonText}>Back to Feed</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+// Comments Screen
+const CommentsScreen = ({ route, navigation }) => {
+  const [post, setPost] = useState(route.params.post);
+  const [newComment, setNewComment] = useState('');
+
+  const addComment = () => {
+    if (!newComment.trim()) return;
+    setPost({
+      ...post,
+      comments: [...post.comments, { id: Date.now(), text: newComment, likes: 0, userId: 1 }],
+    });
+    setNewComment('');
+    Alert.alert('Success', 'Comment posted!');
+  };
+
+  const likeComment = (id) => {
+    setPost({
+      ...post,
+      comments: post.comments.map(c => c.id === id ? { ...c, likes: c.likes + 1 } : c),
+    });
+  };
+
+  return (
+    <ScrollView style={styles.container}>
+      <View style={styles.postDetails}>
+        <Text style={styles.postTitle}>{post.title}</Text>
+        <Image source={{ uri: post.image }} style={styles.postImage} />
+        <Text style={styles.postBody}>{post.body}</Text>
+      </View>
+      <TextInput
+        style={styles.commentInput}
+        placeholder="Add a comment..."
+        value={newComment}
+        onChangeText={setNewComment}
+      />
+      <TouchableOpacity style={styles.commentButton} onPress={addComment}>
+        <Text style={styles.commentButtonText}>Post Comment</Text>
+      </TouchableOpacity>
+      <FlatList
+        data={post.comments}
+        renderItem={({ item }) => (
+          <View style={styles.commentCard}>
+            <Text style={styles.commentText}>{item.text}</Text>
+            <TouchableOpacity onPress={() => likeComment(item.id)}>
+              <Text style={styles.commentLikes}>❤️ {item.likes}</Text>
+            </TouchableOpacity>
+          </View>
+        )}
+        keyExtractor={item => item.id.toString()}
+      />
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => navigation.navigate('Home')}
+      >
+        <Text style={styles.backButtonText}>Back to Feed</Text>
+      </TouchableOpacity>
+    </ScrollView>
+  );
+};
+
+// Notifications Screen
+const NotificationsScreen = ({ navigation }) => {
+  const [notifications, setNotifications] = useState([]);
+
+  useEffect(() => {
+    const sample = [
+      { id: 1, text: 'User 2 liked your post', time: new Date().toLocaleTimeString() },
+      { id: 2, text: 'User 3 commented on your post', time: new Date().toLocaleTimeString() },
+      { id: 3, text: 'User 4 shared your post', time: new Date().toLocaleTimeString() },
+    ];
+    setNotifications(sample);
+  }, []);
+
+  return (
+    <View style={styles.container}>
+      <FlatList
+        data={notifications}
+        renderItem={({ item }) => (
+          <View style={styles.notificationCard}>
+            <Text style={styles.notificationText}>{item.text}</Text>
+            <Text style={styles.notificationTime}>{item.time}</Text>
+          </View>
+        )}
+        keyExtractor={item => item.id.toString()}
+        contentContainerStyle={styles.notificationList}
+      />
+      <TouchableOpacity
+        style={styles.backButton}
+        onPress={() => navigation.navigate('Home')}
+      >
+        <Text style={styles.backButtonText}>Back to Feed</Text>
+      </TouchableOpacity>
+    </View>
+  );
+};
+
+// Main App
+const Stack = createStackNavigator();
+
+const App = () => {
+  return (
+    <>
+      <StatusBar barStyle="light-content" backgroundColor="#1a73e8" />
+      <NavigationContainer>
+        <Stack.Navigator
+          initialRouteName="Auth"
+          screenOptions={{
+            headerStyle: styles.header,
+            headerTintColor: '#fff',
+            headerTitleStyle: styles.headerTitle,
+          }}
+        >
+          <Stack.Screen name="Auth" component={AuthScreen} options={{ title: 'Sakq' }} />
+          <Stack.Screen name="Home" component={HomeScreen} options={{ title: 'Sakq Feed' }} />
+          <Stack.Screen name="MyProfile" component={MyProfileScreen} options={{ title: 'My Profile' }} />
+          <Stack.Screen name="Chat" component={ChatScreen} options={{ title: 'Chat' }} />
+          <Stack.Screen name="Comments" component={CommentsScreen} options={{ title: 'Comments' }} />
+          <Stack.Screen name="Notifications" component={NotificationsScreen} options={{ title: 'Notifications' }} />
+        </Stack.Navigator>
+      </NavigationContainer>
+    </>
+  );
+};
+
+// Styles
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    backgroundColor: '#f0f2f5',
+  },
+  loading: {
+    flex: 1,
+    justifyContent: 'center',
+  },
+  // Auth Styles
+  authContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 20,
+    backgroundColor: '#fff',
+  },
+  authTitle: {
+    fontSize: 28,
+    fontWeight: '700',
+    textAlign: 'center',
+    marginBottom: 30,
+    color: '#1a73e8',
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 15,
+    backgroundColor: '#fafafa',
+    fontSize: 16,
+  },
+  authButton: {
+    backgroundColor: '#1a73e8',
+    padding: 15,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  authButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  switchText: {
+    color: '#1a73e8',
+    textAlign: 'center',
+    fontSize: 14,
+  },
+  // Home Feed Styles
+  navButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: '#fff',
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderColor: '#eee',
+  },
+  navButton: {
+    padding: 10,
+  },
+  navButtonText: {
+    color: '#1a73e8',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  postInputContainer: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderBottomWidth: 1,
+    borderColor: '#eee',
+  },
+  postInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    backgroundColor: '#fafafa',
+    fontSize: 16,
+  },
+  imageInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 12,
+    padding: 12,
+    marginBottom: 10,
+    backgroundColor: '#fafafa',
+    fontSize: 14,
+  },
+  postButton: {
+    backgroundColor: '#1a73e8',
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  postButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  cancelButton: {
+    backgroundColor: '#ff4444',
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  feedList: {
+    padding: 10,
+  },
+  postCard: {
+    backgroundColor: '#fff',
+    borderRadius: 12,
+    padding: 15,
+    marginBottom: 15,
+    elevation: 3,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.1,
+    shadowRadius: 4,
+  },
+  postUser: {
+    fontSize: 14,
+    color: '#1a73e8',
+    marginBottom: 5,
+  },
+  postTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 5,
+  },
+  postBody: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 10,
+  },
+  postImage: {
+    width: '100%',
+    height: 200,
+    borderRadius: 8,
+    marginBottom: 10,
+  },
+  postStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    flexWrap: 'wrap',
+  },
+  statText: {
+    fontSize: 14,
+    color: '#666',
+    marginRight: 10,
+    marginBottom: 5,
+  },
+  // My Profile Styles
+  profileHeader: {
+    alignItems: 'center',
+    padding: 20,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderColor: '#eee',
+  },
+  profilePic: {
+    width: 100,
+    height: 100,
+    borderRadius: 50,
+    marginBottom: 10,
+  },
+  profileName: {
+    fontSize: 24,
+    fontWeight: '700',
+    color: '#333',
+  },
+  profileDetails: {
+    padding: 20,
+    backgroundColor: '#fff',
+  },
+  profileLabel: {
+    fontSize: 16,
+    fontWeight: '600',
+    color: '#333',
+    marginBottom: 5,
+  },
+  profileText: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 15,
+  },
+  profileInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 8,
+    padding: 10,
+    fontSize: 14,
+    backgroundColor: '#fafafa',
+    marginBottom: 15,
+  },
+  editButton: {
+    backgroundColor: '#1a73e8',
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  editButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  saveButton: {
+    backgroundColor: '#34c759',
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginBottom: 15,
+  },
+  saveButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Chat Styles
+  chatList: {
+    padding: 10,
+  },
+  myMessage: {
+    alignSelf: 'flex-end',
+    backgroundColor: '#1a73e8',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 10,
+    maxWidth: '70%',
+  },
+  friendMessage: {
+    alignSelf: 'flex-start',
+    backgroundColor: '#e0e0e0',
+    borderRadius: 12,
+    padding: 10,
+    marginBottom: 10,
+    maxWidth: '70%',
+  },
+  messageText: {
+    fontSize: 14,
+    color: '#fff',
+  },
+  messageTime: {
+    fontSize: 10,
+    color: '#ddd',
+    marginTop: 5,
+  },
+  chatInputContainer: {
+    flexDirection: 'row',
+    padding: 10,
+    backgroundColor: '#fff',
+    borderTopWidth: 1,
+    borderColor: '#eee',
+  },
+  chatInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 12,
+    padding: 10,
+    marginRight: 10,
+    backgroundColor: '#fafafa',
+  },
+  sendButton: {
+    backgroundColor: '#1a73e8',
+    padding: 10,
+    borderRadius: 12,
+    justifyContent: 'center',
+  },
+  sendButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  // Comments Styles
+  postDetails: {
+    padding: 20,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderColor: '#eee',
+  },
+  commentInput: {
+    borderWidth: 1,
+    borderColor: '#ddd',
+    borderRadius: 12,
+    padding: 12,
+    margin: 15,
+    backgroundColor: '#fafafa',
+  },
+  commentButton: {
+    backgroundColor: '#1a73e8',
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    marginHorizontal: 15,
+    marginBottom: 15,
+  },
+  commentButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  commentCard: {
+    padding: 15,
+    backgroundColor: '#fff',
+    borderBottomWidth: 1,
+    borderColor: '#eee',
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  commentText: {
+    fontSize: 14,
+    color: '#333',
+    flex: 1,
+  },
+  commentLikes: {
+    fontSize: 12,
+    color: '#666',
+  },
+  // Notifications Styles
+  notificationList: {
+    padding: 10,
+  },
+  notificationCard: {
+    backgroundColor: '#fff',
+    padding: 15,
+    borderRadius: 12,
+    marginBottom: 10,
+    elevation: 2,
+  },
+  notificationText: {
+    fontSize: 14,
+    color: '#333',
+  },
+  notificationTime: {
+    fontSize: 12,
+    color: '#999',
+    marginTop: 5,
+  },
+  // Back Button
+  backButton: {
+    backgroundColor: '#1a73e8',
+    padding: 12,
+    borderRadius: 12,
+    alignItems: 'center',
+    margin: 15,
+  },
+  backButtonText: {
+    color: '#fff',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  // Navigation Styles
+  header: {
+    backgroundColor: '#1a73e8',
+    elevation: 0,
+    shadowOpacity: 0,
+  },
+  headerTitle: {
+    fontWeight: '700',
+    fontSize: 20,
+  },
+});
+
+export default App;
