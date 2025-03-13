@@ -1,0 +1,372 @@
+import React, { useState, useEffect } from 'react';
+import {
+  View,
+  Text,
+  TextInput,
+  FlatList,
+  Image,
+  StyleSheet,
+  Button,
+  ActivityIndicator,
+  TouchableOpacity,
+  Modal,
+} from 'react-native';
+import axios from 'axios';
+import Icon from 'react-native-vector-icons/FontAwesome'; // For icons
+
+const API_KEY = '87170a9b'; // Replace with your actual OMDb API key
+const API_URL = 'http://www.omdbapi.com/';
+
+const App = () => {
+  const [movies, setMovies] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [isLoggedIn, setIsLoggedIn] = useState(false); // Login state
+  const [selectedMovie, setSelectedMovie] = useState(null); // Selected movie for details
+  const [bookingDetails, setBookingDetails] = useState(null); // Booking details
+  const [showBookingForm, setShowBookingForm] = useState(false); // Show booking form
+  const [showHallsAndPayment, setShowHallsAndPayment] = useState(false); // Show halls and payment details
+  const [searchQuery, setSearchQuery] = useState(''); // Search query
+  const [marriageHalls, setMarriageHalls] = useState([
+    { name: 'Hall 1', freeDates: ['2023-12-25', '2023-12-26'], dresses: ['Dress A', 'Dress B'] },
+    { name: 'Hall 2', freeDates: ['2023-12-27', '2023-12-28'], dresses: ['Dress C', 'Dress D'] },
+  ]); // Example marriage halls
+
+  // Fetch movies from OMDb API
+  useEffect(() => {
+    const fetchMovies = async () => {
+      try {
+        const response = await axios.get(API_URL, {
+          params: {
+            apikey: API_KEY,
+            s: 'movie',
+            page: 1,
+          },
+        });
+
+        if (response.data.Response === 'True') {
+          setMovies(response.data.Search.slice(0, 6)); // Show top 6 movies
+        } else {
+          setError(response.data.Error || 'No movies found.');
+        }
+      } catch (error) {
+        console.error('Error fetching movies:', error);
+        setError('Failed to load movies. Please check your API key or try again later.');
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchMovies();
+  }, []);
+
+  // Filter movies based on search query
+  const filteredMovies = movies.filter(movie =>
+    movie.Title.toLowerCase().includes(searchQuery.toLowerCase())
+  );
+
+  // Render movie item
+  const renderMovieItem = ({ item }) => (
+    <TouchableOpacity style={styles.movieCard} onPress={() => setSelectedMovie(item)}>
+      <Image
+        source={{ uri: item.Poster !== 'N/A' ? item.Poster : 'https://via.placeholder.com/150' }}
+        style={styles.moviePoster}
+      />
+      <Text style={styles.movieTitle}>{item.Title}</Text>
+      <Text style={styles.movieDate}>Year: {item.Year}</Text>
+      <Button title="Book Now" onPress={() => handleBookMovie(item)} />
+    </TouchableOpacity>
+  );
+
+  // Handle booking a movie
+  const handleBookMovie = (movie) => {
+    if (!isLoggedIn) {
+      alert('Please login to book a movie.');
+      return;
+    }
+    setSelectedMovie(movie);
+    setShowBookingForm(true); // Show booking form
+  };
+
+  // Handle booking submission
+  const handleBookingSubmit = (name, location, time) => {
+    const booking = {
+      movie: selectedMovie.Title,
+      name,
+      location,
+      time,
+    };
+    setBookingDetails(booking); // Save booking details
+    setShowBookingForm(false); // Hide booking form
+    setShowHallsAndPayment(true); // Show halls and payment details
+  };
+
+  // Render booking form
+  const renderBookingForm = () => (
+    <Modal visible={showBookingForm} transparent={true} animationType="slide">
+      <View style={styles.modalContainer}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Book {selectedMovie?.Title}</Text>
+          <View style={styles.formGroup}>
+            <Icon name="user" size={20} color="#007bff" />
+            <TextInput
+              style={styles.input}
+              placeholder="Your Name"
+              onChangeText={(text) => setBookingDetails({ ...bookingDetails, name: text })}
+            />
+          </View>
+          <View style={styles.formGroup}>
+            <Icon name="map-marker" size={20} color="#007bff" />
+            <TextInput
+              style={styles.input}
+              placeholder="Your Location"
+              onChangeText={(text) => setBookingDetails({ ...bookingDetails, location: text })}
+            />
+          </View>
+          <View style={styles.formGroup}>
+            <Icon name="clock-o" size={20} color="#007bff" />
+            <TextInput
+              style={styles.input}
+              placeholder="Available Time (e.g., 6:00 PM)"
+              onChangeText={(text) => setBookingDetails({ ...bookingDetails, time: text })}
+            />
+          </View>
+          <Button title="Confirm Booking" onPress={() => handleBookingSubmit(
+            bookingDetails?.name,
+            bookingDetails?.location,
+            bookingDetails?.time
+          )} />
+          <Button title="Cancel" onPress={() => setShowBookingForm(false)} />
+        </View>
+      </View>
+    </Modal>
+  );
+
+  // Render halls and payment details
+  const renderHallsAndPayment = () => (
+    <Modal visible={showHallsAndPayment} transparent={true} animationType="slide">
+      <View style={styles.modalContainer}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Available Halls</Text>
+          {marriageHalls.map((hall, index) => (
+            <View key={index} style={styles.hallCard}>
+              <Text style={styles.hallName}>{hall.name}</Text>
+              <Text>Free Dates: {hall.freeDates.join(', ')}</Text>
+              <Text>Available Dresses: {hall.dresses.join(', ')}</Text>
+            </View>
+          ))}
+          <Text style={styles.paymentText}>Amount to Pay: $20</Text>
+          <Button title="Pay Online" onPress={() => alert('Redirect to payment gateway')} />
+          <Button title="Pay In Person" onPress={() => alert('Pay at the venue')} />
+          <Button title="Close" onPress={() => setShowHallsAndPayment(false)} />
+        </View>
+      </View>
+    </Modal>
+  );
+
+  // Render login modal
+  const renderLoginModal = () => (
+    <Modal visible={!isLoggedIn} transparent={true} animationType="slide">
+      <View style={styles.modalContainer}>
+        <View style={styles.modalContent}>
+          <Text style={styles.modalTitle}>Login to SakQ Ticket Booking App</Text>
+          <TextInput
+            style={styles.input}
+            placeholder="Username"
+          />
+          <TextInput
+            style={styles.input}
+            placeholder="Password"
+            secureTextEntry
+          />
+          <Button title="Login" onPress={() => setIsLoggedIn(true)} />
+        </View>
+      </View>
+    </Modal>
+  );
+
+  return (
+    <View style={styles.container}>
+      {/* Stylish App Name */}
+      <View style={styles.header}>
+        <Text style={styles.appName}>SakQ Ticket Booking App</Text>
+      </View>
+
+      {/* Login Section */}
+      {!isLoggedIn && (
+        <View style={styles.loginSection}>
+          <Button title="Login" onPress={() => setIsLoggedIn(true)} />
+        </View>
+      )}
+
+      {/* Search Bar */}
+      {isLoggedIn && (
+        <View style={styles.searchBarContainer}>
+          <TextInput
+            style={styles.searchBar}
+            placeholder="Search movies..."
+            value={searchQuery}
+            onChangeText={setSearchQuery}
+          />
+          <Icon name="search" size={20} color="#007bff" style={styles.searchIcon} />
+        </View>
+      )}
+
+      {/* Movie List */}
+      {isLoggedIn && (
+        <View style={styles.movieList}>
+          <Text style={styles.sectionTitle}>Select a Movie</Text>
+          <FlatList
+            data={filteredMovies}
+            keyExtractor={(item) => item.imdbID}
+            renderItem={renderMovieItem}
+            ListEmptyComponent={
+              !loading && <Text style={styles.emptyText}>No movies found.</Text>
+            }
+          />
+        </View>
+      )}
+
+      {/* Login Modal */}
+      {renderLoginModal()}
+
+      {/* Booking Form Modal */}
+      {renderBookingForm()}
+
+      {/* Halls and Payment Modal */}
+      {renderHallsAndPayment()}
+    </View>
+  );
+};
+
+// Styles
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+    padding: 20,
+    backgroundColor: '#f5f5f5',
+  },
+  header: {
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  appName: {
+    fontSize: 28,
+    fontWeight: 'bold',
+    color: '#007bff',
+    textShadowColor: 'rgba(0, 0, 0, 0.2)',
+    textShadowOffset: { width: 1, height: 1 },
+    textShadowRadius: 5,
+  },
+  loginSection: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  searchBarContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 20,
+  },
+  searchBar: {
+    flex: 1,
+    height: 40,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 5,
+    paddingHorizontal: 10,
+    marginRight: 10,
+  },
+  searchIcon: {
+    marginLeft: 10,
+  },
+  movieList: {
+    marginTop: 20,
+  },
+  sectionTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  movieCard: {
+    backgroundColor: '#fff',
+    padding: 10,
+    borderRadius: 5,
+    marginBottom: 10,
+    alignItems: 'center',
+  },
+  moviePoster: {
+    width: 150,
+    height: 200,
+    borderRadius: 5,
+  },
+  movieTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginTop: 10,
+  },
+  movieDate: {
+    fontSize: 14,
+    color: '#666',
+    marginBottom: 10,
+  },
+  errorText: {
+    color: 'red',
+    textAlign: 'center',
+    marginBottom: 20,
+  },
+  emptyText: {
+    textAlign: 'center',
+    color: '#666',
+  },
+  modalContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+  },
+  modalContent: {
+    width: '80%',
+    padding: 20,
+    backgroundColor: '#fff',
+    borderRadius: 10,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 20,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  formGroup: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  input: {
+    flex: 1,
+    height: 40,
+    borderColor: '#ccc',
+    borderWidth: 1,
+    borderRadius: 5,
+    paddingHorizontal: 10,
+    marginLeft: 10,
+  },
+  hallCard: {
+    backgroundColor: '#fff',
+    padding: 10,
+    borderRadius: 5,
+    marginBottom: 10,
+  },
+  hallName: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginBottom: 5,
+  },
+  paymentText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    marginTop: 10,
+  },
+});
+
+export default App;
